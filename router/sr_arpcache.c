@@ -17,7 +17,7 @@
   See the comments in the header file for an idea of what it should look like.
 */
 void sr_arpcache_sweepreqs(struct sr_instance *sr) {
-    struct sr_arpreq req*, next*;
+    struct sr_arpreq *req, *next;
     for (req = sr->cache.requests;req;req=next){
         next = req->next;
         handle_arpreq(sr,req);
@@ -32,7 +32,7 @@ void handle_arpreq(struct sr_instance *sr, struct sr_arpreq *req){
 
             for (pkt = req->packets; pkt; pkt = nxt) {
                 nxt = pkt->next;
-                icmp_error(sr,pkt,3,1);
+                icmp_error(sr,pkt->buf,3,1);
             }
             sr_arpreq_destroy(&sr->cache,req);
         }else{
@@ -46,24 +46,25 @@ void handle_arpreq(struct sr_instance *sr, struct sr_arpreq *req){
 
 void send_arp_req(struct sr_instance *sr, struct sr_arpreq *req){
     printf("Send Arp request.\n");
-    uint8_t new_packet = (uint8_t *) malloc(sizeof(sr_ethernet_hdr_t)+sizeof(sr_arp_hdr_t));
+    uint8_t *new_packet = malloc(sizeof(sr_ethernet_hdr_t)+sizeof(sr_arp_hdr_t));
     unsigned int new_length = sizeof(sr_ethernet_hdr_t)+sizeof(sr_arp_hdr_t);
     sr_ethernet_hdr_t *eth_hdr = (sr_ethernet_hdr_t *)(new_packet);
     sr_arp_hdr_t *arp_hdr = (sr_arp_hdr_t *)(new_packet + sizeof(sr_ethernet_hdr_t));
-    eth_hdr->ether_dhost = 0xff;
-    eth_hdr->ether_shost = sr->if_list->addr;
+    int i;
+    for(i = 0;i<ETHER_ADDR_LEN;i++){
+        eth_hdr->ether_dhost[i] = 0xFF;
+    }
+    memcpy(eth_hdr->ether_shost,sr->if_list->addr,ETHER_ADDR_LEN);
     eth_hdr->ether_type = ethertype_arp;
     arp_hdr ->ar_hrd = 0x0001;
     arp_hdr->ar_hln = ETHER_ADDR_LEN;
     arp_hdr->ar_pro = ethertype_ip;
     arp_hdr->ar_pln = 4;
     arp_hdr->ar_op = arp_op_request;
-    arp_hdr->ar_sha = sr->if_list->addr;
+    memcpy(arp_hdr->ar_sha,sr->if_list->addr,ETHER_ADDR_LEN);
     struct sr_if *out_int = sr_get_interface(sr,req->packets->iface);
     arp_hdr->ar_sip = out_int->ip;
-    arp_hdr -> ar_tha = 0;
     arp_hdr ->ar_tip = req->ip;
-    print_hdrs(new_packet,new_length);
     sr_send_packet(sr,new_packet,new_length,req->packets->iface);
 }
 
